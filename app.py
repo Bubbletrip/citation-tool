@@ -111,18 +111,41 @@ with tab1:
                         verdict = "❌ HALLUCINATED"
                         detail = "DOI not found in CrossRef registry"
                 else:
+                    # Try Semantic Scholar first
                     search = requests.get(
                         "https://api.semanticscholar.org/graph/v1/paper/search",
                         params={"query": title, "limit": 1, "fields": "title,year"}
                     )
                     time.sleep(0.2)
                     results_ss = search.json().get("data", [])
+
+                    # Try arXiv as second source
+                    arxiv_found = False
+                    try:
+                        arxiv_search = requests.get(
+                            f"http://export.arxiv.org/api/query?search_query=ti:{title[:50]}&max_results=1",
+                            timeout=5
+                        )
+                        if arxiv_search.status_code == 200 and title.lower()[:20] in arxiv_search.text.lower():
+                            arxiv_found = True
+                    except:
+                        arxiv_found = False
+
                     if results_ss and results_ss[0]["title"].lower() == title.lower():
                         verdict = "⚠️ UNVERIFIABLE"
-                        detail = "No DOI but title found in Semantic Scholar — likely real, manual check recommended"
-                    else:
+                        detail = "No DOI but title found in Semantic Scholar — likely real. DOIs weren't standard before 2000; manual check recommended."
+                    elif arxiv_found:
                         verdict = "⚠️ UNVERIFIABLE"
-                        detail = "No DOI provided — book or older work, manual check recommended"
+                        detail = "No DOI but found on arXiv — likely real preprint. ArXiv papers use arXiv IDs not DOIs; manual check recommended."
+                    else:
+                        # Determine likely reason
+                        if year and int(year) < 2000:
+                            detail = "No DOI — pre-2000 paper. DOIs weren't standard before 2000. Verify manually — this doesn't mean it's fake."
+                        else:
+                            detail = "No DOI found — likely a conference paper, arXiv preprint, or book. Verify manually via Google Scholar."
+                        verdict = "⚠️ UNVERIFIABLE"
+
+                
 
                 results.append({
                     "short_title": short_title,
@@ -172,6 +195,10 @@ with tab1:
                     st.write(f"**Authors:** {r['authors']}")
                     st.write(f"**Year:** {r['year']}")
                     st.write(f"**DOI:** {r['doi'] if r['doi'] else 'Not provided'}")
+                    # Google Scholar search link
+                    gs_query = r['title'].replace(' ', '+')
+                    gs_url = f"https://scholar.google.com/scholar?q={gs_query}"
+                    st.markdown(f"[🔍 Search on Google Scholar]({gs_url})")
 
         else:
             st.warning("Please paste a bibliography first.")
