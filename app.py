@@ -11,7 +11,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 st.set_page_config(page_title="Citation Tool", layout="wide")
 
-tab1, tab2 = st.tabs(["📋 Citation Verifier", "🔍 Citation Finder"])
+tab1, tab2, tab3 = st.tabs(["📋 Citation Verifier", "🔍 Citation Finder", "✍️ Literature Generator"])
 
 # ─────────────────────────────────────────
 # TAB 1 — CITATION VERIFIER
@@ -449,3 +449,185 @@ with tab2:
                             st.write(f"**Abstract:** {abstract[:300]}...")
                         else:
                             st.write(f"**Abstract:** {abstract}")
+
+# ─────────────────────────────────────────
+# TAB 3 — LITERATURE GENERATOR
+# ─────────────────────────────────────────
+with tab3:
+    st.title("✍️ Literature Review Generator")
+    st.write("Describe your research topic and we'll find real verified papers and generate a grounded literature review paragraph.")
+
+    st.info("""
+    **How this works:**
+    - We search for real papers on your topic using OpenAlex
+    - Every paper is verified against CrossRef
+    - GPT-4o writes a literature review grounded only in those real papers
+    - No hallucinated citations — every claim traces back to a verified source
+    """)
+
+    gen_query = st.text_area("Describe your research topic or question", height=100,
+                             placeholder="e.g. The relationship between employee attrition and organizational commitment in IT sector")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        gen_num_papers = st.slider("Number of papers to include", 3, 10, 5)
+    with col2:
+        gen_year_from = st.slider("Papers from year", 1990, 2025, 2010)
+
+    gen_style = st.selectbox("Writing style", [
+        "Academic — formal literature review",
+        "Accessible — clear and readable",
+        "Critical — evaluates strengths and limitations"
+    ])
+
+    if st.button("Generate Literature Review"):
+        if not gen_query:
+            st.warning("Please describe your research topic first.")
+        else:
+            # Step 1 — Find real papers
+            with st.spinner("Finding real verified papers..."):
+                params = {
+                    "search": gen_query,
+                    "per_page": gen_num_papers + 5,
+                    "mailto": "tarunsaiexperiment@gmail.com",
+                    "filter": f"publication_year:>{gen_year_from}"
+                }
+
+                response = requests.get("https://api.openalex.org/works", params=params)
+                raw_papers = response.json().get("results", [])
+
+                # Normalise
+                papers = []
+                for p in raw_papers:
+                    doi_raw = p.get("doi", None)
+                    doi = doi_raw.replace("https://doi.org/", "") if doi_raw else None
+
+                    authors = []
+                    for a in p.get("authorships", [])[:3]:
+                        name = a.get("author", {}).get("display_name", "")
+                        if name:
+                            authors.append({"name": name})
+
+                    abstract = None
+                    inverted = p.get("abstract_inverted_index", None)
+                    if inverted:
+                        try:
+                            word_positions = []
+                            for word, positions in inverted.items():
+                                for pos in positions:
+                                    word_positions.append((pos, word))
+                            word_positions.sort(key=lambda x: x[0])
+                            abstract = " ".join([w for _, w in word_positions])
+                        except:
+                            abstract = None
+
+                    if p.get("title") and abstract:
+                        papers.append({
+                            "title": p.get("title", "No title"),
+                            "authors": authors,
+                            "year": p.get("publication_year", None),
+                            "doi": doi,
+                            "abstract": abstract,
+                            "citations": p.get("cited_by_count", 0)
+                        })
+
+                # Filter by year and take top papers
+                papers = [p for p in papers if p.get("year") and p["year"] >= gen_year_from]
+                # Deduplicate by title
+                seen_titles = set()
+                unique_papers = []
+                for p in papers:
+                    if p["title"].lower() not in seen_titles:
+                        seen_titles.add(p["title"].lower())
+                        unique_papers.append(p)
+                papers = unique_papers[:gen_num_papers]
+
+            if not papers:
+                st.warning("No papers found. Try broadening your topic or adjusting the year range.")
+            else:
+                # Step 2 — Verify DOIs
+                with st.spinner("Verifying papers..."):
+                    verified_papers = []
+                    for p in papers:
+                        if p["doi"]:
+                            cr = requests.get(f"https://api.crossref.org/works/{p['doi']}")
+                            time.sleep(0.2)
+                            p["verified"] = cr.status_code == 200
+                        else:
+                            p["verified"] = False
+                        verified_papers.append(p)
+                # Only use verified papers for generation
+                verified_papers = [p for p in verified_papers if p["verified"]]
+
+                if not verified_papers:
+                    st.warning("No verified papers found for this topic. Try broadening your search or adjusting the year range.")
+                    st.stop()
+
+                # Step 3 — Show papers being used
+                st.subheader(f"Generating review based on {len(verified_papers)} papers:")
+                for i, p in enumerate(verified_papers):
+                    authors_str = ", ".join([a["name"] for a in p["authors"][:2]])
+                    doi_badge = "✅" if p["verified"] else "⚠️"
+                    st.write(f"{doi_badge} **{p['title']}** — {authors_str} ({p['year']})")
+
+                # Step 4 — Generate with GPT-4o
+                with st.spinner("Writing literature review..."):
+                    # Build context from papers
+                    papers_context = ""
+                    for i, p in enumerate(verified_papers):
+                        authors_str = ", ".join([a["name"] for a in p["authors"][:2]])
+                        papers_context += f"""
+Paper {i+1}:
+Title: {p['title']}
+Authors: {authors_str}
+Year: {p['year']}
+Abstract: {p['abstract'][:500] if p['abstract'] else 'No abstract'}
+DOI: {p['doi'] if p['doi'] else 'No DOI'}
+---
+"""
+
+                    style_instruction = {
+                        "Academic — formal literature review": "Write in formal academic style suitable for a journal submission. Use third person. Be precise and scholarly.",
+                        "Accessible — clear and readable": "Write in clear, accessible language that a non-specialist could understand while remaining accurate.",
+                        "Critical — evaluates strengths and limitations": "Write critically, evaluating the strengths and limitations of each study. Note gaps and contradictions."
+                    }[gen_style]
+
+                    prompt = f"""You are an academic writing assistant. 
+                    
+Write a literature review paragraph on the topic: "{gen_query}"
+
+Use ONLY the following papers as your sources. Do not cite any other papers or make up any references.
+Cite papers as (Author, Year) inline.
+
+{papers_context}
+
+Instructions:
+- {style_instruction}
+- Cite every claim with (Author, Year)
+- Only use the papers provided above
+- Write 150-250 words
+- End with a sentence identifying a research gap
+
+Write only the paragraph, nothing else."""
+
+                    response = client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=[{"role": "user", "content": prompt}],
+                        temperature=0.7
+                    )
+
+                    generated_text = response.choices[0].message.content
+
+                # Step 5 — Display
+                st.subheader("Generated Literature Review")
+                st.write(generated_text)
+
+                # Reference list
+                st.subheader("References Used")
+                for i, p in enumerate(verified_papers):
+                    authors_str = ", ".join([a["name"] for a in p["authors"][:2]])
+                    doi_str = f"https://doi.org/{p['doi']}" if p["doi"] else "No DOI"
+                    verified_str = "✅ Verified" if p["verified"] else "⚠️ Unverified"
+                    st.markdown(f"**{i+1}.** {authors_str} ({p['year']}). *{p['title']}*. {doi_str} — {verified_str}")
+
+                st.info("⚠️ Always review the generated text before using it. Verify that citations accurately represent the source papers.")
