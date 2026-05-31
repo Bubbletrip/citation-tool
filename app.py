@@ -630,4 +630,11 @@ Write only the paragraph, nothing else."""
                     verified_str = "✅ Verified" if p["verified"] else "⚠️ Unverified"
                     st.markdown(f"**{i+1}.** {authors_str} ({p['year']}). *{p['title']}*. {doi_str} — {verified_str}")
 
-                st.info("⚠️ Always review the generated text before using it. Verify that citations accurately represent the source papers.")
+                st.warning("""
+⚠️ **Important before using this text:**
+- This is a first draft to help structure your thinking — not ready to submit
+- Rewrite in your own voice before using in any paper
+- AI detectors like Turnitin and GPTZero will flag this text if submitted as-is
+- Verify that each citation accurately represents what the source paper actually says
+- The papers are verified as real — but always read them before citing
+""")
