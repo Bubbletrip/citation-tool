@@ -1,10 +1,10 @@
 # Citation Tool — Verifier, Finder & Literature Generator
 
-A two-tab tool that solves the academic citation hallucination problem.
+A three-tab tool that solves the academic citation hallucination problem.
 
 ## The Problem
 
-AI tools like ChatGPT confidently generate fake academic references — 
+AI tools confidently generate fake academic references — 
 real-looking titles, plausible authors, and DOIs that don't exist. 
 Journal editors and researchers have no easy way to catch these.
 
