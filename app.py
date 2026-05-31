@@ -209,6 +209,13 @@ with tab1:
 with tab2:
     st.title("🔍 Citation Finder")
     st.write("Search for real, verified academic papers. All filters are optional.")
+    st.info("""
+    **Note on DOI verification:**
+    - Papers published after 2005 will generally have verified DOIs
+    - Conference papers and arXiv preprints may not have DOIs even if real
+    - Pre-2000 papers rarely have DOIs — this doesn't mean they're fake
+    - Use the Google Scholar link in results to manually verify older papers
+    """)
 
     query = st.text_input("Research question or topic (required)")
 
@@ -229,7 +236,7 @@ with tab2:
         author_name = st.text_input("Author name", placeholder="Leave blank for any author")
 
     with col2:
-        year_range = st.slider("Year range", 1990, 2025, (1990, 2025))
+        year_range = st.slider("Year range", 1900, 2025, (2005, 2025))
         min_citations = st.slider("Minimum citation count", 0, 500, 0, step=10)
 
     with st.expander("⚙️ Advanced Settings — Adjust Scoring Weights"):
