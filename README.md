@@ -1,4 +1,4 @@
-# Citation Tool — Verifier & Finder
+# Citation Tool — Verifier, Finder & Literature Generator
 
 A two-tab tool that solves the academic citation hallucination problem.
 
@@ -23,6 +23,12 @@ Search for real verified papers by topic. Filter by field of study,
 year range, citation count, and author. Results ranked by a combined 
 score of relevance, citations, and recency. Every result includes 
 a verified DOI and abstract.
+
+**Tab 3 — Literature Review Generator**
+Describe your research topic and the tool finds real verified papers, 
+then uses GPT-4o to write a grounded literature review paragraph 
+citing only those verified sources. Zero hallucination risk — 
+every citation traces back to a CrossRef-verified paper.
 
 ## Live Demo
 
